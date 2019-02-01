@@ -6,15 +6,20 @@ __license__ = "GPLv3+"
 
 # Automatic measurement of static characteristics of RF detector
 
-pow_syntax = ":SOUR1:POW:"    # Setting power [dBm]
-att_syntax = ":SOUR1:POW:ATT" # Attenuator range [10]
+pow_syntax = "SOUR1:POW"    # Setting power [dBm]
+att_syntax = "SOUR1:POW:ATT" # Attenuator range [10]
 
 from pylab import *
 import time # for delay
 
-import visa    # GPIB   comm port lib
+import vxi11    # GPIB   comm port lib
 import serial  # Serial comm port lib
 
+#NA = None
+NA = vxi11.Instrument('192.168.1.3')
+print( "Network analyzer: ", NA.ask('*IDN?') )
+
+ser = serial.Serial('/dev/ttyUSB0', 9600, timeout = 2.00)
 
 #   Power range per attenuator: ( From doc.)
 #       --------------------------------
@@ -41,15 +46,24 @@ def calculate_attenuation( P ): # P - power [dBm]
 
 def command_Arduino( command ): # giving out command to Arduino
     print ("ARD_OUT: " + command)
+    ser.write(b'SAMPLE\n')
+    ser.flush()
+    time.sleep(1.2)
     return
 
 def read_Arduino():
-    #V = ser.readline()
-    V = 10.44
+    print("Reading...")
+    V = 0
+    while( ser.inWaiting() ): 
+        V = ser.readline()
+
+    V = float(V)
+    print("V[ard] = " + str(V) )
     return V
 
 def command_NA( command = "*idn?" ): # giving out command to Network analyzer
     print (" NA_OUT: " + command)
+    NA.write(command)
     time.sleep(0.2)
     return 
 
@@ -75,13 +89,22 @@ def set_power(P):
 
 # Init with no initial power attenuation
 current_power_attenuator = None
-power_vector = np.arange(-45, -5, 1)
+power_vector = np.arange(-45, -5, 5)
 print(power_vector)
 
 ### MAIN CODE
 
 V_vector = zeros(size(power_vector))
 j = 0
+
+
+time.sleep(2.00)
+
+while( ser.inWaiting() ): 
+    ser.readline()
+
+command_Arduino("SAMPLE\n")
+read_Arduino()
 
 for P in power_vector:
     
@@ -90,9 +113,19 @@ for P in power_vector:
 
     time.sleep(0.200)
 
-    command_Arduino("SAMPLE")
+    command_Arduino("SAMPLE\n")
     Value = read_Arduino()
     
     V_vector[j] = Value
     j+=1
 
+plt.plot(power_vector, V_vector, 'ro')
+plt.title("Static characteristics of RF detector sensor")
+plt.xlabel("Power [dBm]")
+plt.ylabel("Measured voltage [V]")
+plt.grid()
+plt.show()
+
+timestr = time.strftime("_at_%H:%M:%S")
+
+savetxt("measure" + timestr + ".csv", column_stack((power_vector, V_vector)), header = "P [dBm], V [V]")
