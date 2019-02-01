@@ -14,9 +14,11 @@ import time # for delay
 
 import vxi11    # GPIB   comm port lib
 import serial  # Serial comm port lib
+import visa
 
 #NA = None
 NA = vxi11.Instrument('192.168.1.3')
+
 print( "Network analyzer: ", NA.ask('*IDN?') )
 
 ser = serial.Serial('/dev/ttyUSB0', 9600, timeout = 2.00)
@@ -33,7 +35,7 @@ ser = serial.Serial('/dev/ttyUSB0', 9600, timeout = 2.00)
 #       ---------------------------------
 
 def calculate_attenuation( P ): # P - power [dBm]
-    if ( P > 0 or P < -45):
+    if ( P > 5 or P < -45):
         raise ValueError('Power out of range!')
     if  ( -45 <= P and P < -30):
         return 40
@@ -43,12 +45,14 @@ def calculate_attenuation( P ): # P - power [dBm]
         return 20
     elif( -15 <= P and P < 0):
         return 10
+    elif ( -5 <= P and P < 10):
+        return 0
 
 def command_Arduino( command ): # giving out command to Arduino
     print ("ARD_OUT: " + command)
     ser.write(b'SAMPLE\n')
     ser.flush()
-    time.sleep(1.2)
+    time.sleep(0.2)
     return
 
 def read_Arduino():
@@ -64,7 +68,7 @@ def read_Arduino():
 def command_NA( command = "*idn?" ): # giving out command to Network analyzer
     print (" NA_OUT: " + command)
     NA.write(command)
-    time.sleep(0.2)
+    time.sleep(0.1)
     return 
 
 
@@ -80,7 +84,7 @@ def set_power_attenuator( P ):
         command_NA( att_syntax + " " + str(Px)  )
 
 def set_power(P):
-    if ( P > 0 or P < -45):
+    if ( P > 5 or P < -45):
         raise ValueError('Power out of range!')
    
     command_NA( pow_syntax + " " + str(P) )
@@ -89,7 +93,8 @@ def set_power(P):
 
 # Init with no initial power attenuation
 current_power_attenuator = None
-power_vector = np.arange(-45, -5, 5)
+power_vector = np.arange(-10, 5, 0.5)
+power_vector = flip(power_vector)
 print(power_vector)
 
 ### MAIN CODE
@@ -111,7 +116,7 @@ for P in power_vector:
     set_power_attenuator(P)
     set_power(P)
 
-    time.sleep(0.200)
+    time.sleep(0.100)
 
     command_Arduino("SAMPLE\n")
     Value = read_Arduino()
