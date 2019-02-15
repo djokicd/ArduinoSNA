@@ -28,7 +28,7 @@ j = 0
 
 for P in power_vector:
     NA.setPower(P)
-    ARD.command("SAMPLE")
+    ARD.command("SAMPLE0")
     V_vector[j] = ARD.read()
     j += 1
 

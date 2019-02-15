@@ -16,7 +16,11 @@ class INetworkAnalyzerE5062:
     powSyntax = "SOUR1:POW"
     attSyntax = "SOUR1:POW:ATT"
     freqSyntax = "SENS1:FREQ:CENT"
+    spanSyntax = "SENS1:FREQ:SPAN"
     currentAttenuation = None
+    currentSpan = None
+
+    S11 = None
 
     def __init__(self, address):
         self.ip = address
@@ -33,10 +37,15 @@ class INetworkAnalyzerE5062:
         else:
             return False
 
+    def ask(self, command):
+        return( self.NA.ask(command) )
+
     def connect(self):
-        #self.NA = vxi11.Instrument( self.ip )
+        self.NA = vxi11.Instrument( self.ip )
         print("Testing connection to NA...")
-        #print( self.NA.ask("*IDN?") )
+        print(self.ask("*IDN?"))
+        self.command("CALC1:PAR1:DEF S11")
+        self.command("CALC1:FORM MLOG")
 
     def calculateAttenuation(self, P):  # P - power [dBm]
         if (P > 5 or P < -45):
@@ -68,15 +77,24 @@ class INetworkAnalyzerE5062:
         return
 
     def setFrequency(self, F):
+        if (self.currentSpan is None):
+            self.currentSpan = 0
+            self.command(self.spanSyntax + " 0")
+
         if ( F >= 3e5 and F <= 3e9  ):
             self.command(self.freqSyntax + " " + str(F))
         else:
             print("Frequency out of range!")
         return
 
+    def getS11(self):
+         self.S11 = str( self.ask("CALC1:DATA:FDAT?") )
+         self.S11 = float(self.S11.split(",")[0])
+         return self.S11
+
     def command(self, command="*IDN?"):
         print ("To NA: " + command)
-        #self.NA.write(command)
+        self.NA.write(command)
         time.sleep(self.commandDelay)
         return
 
@@ -90,16 +108,25 @@ class IArduino:
               ", using baud rate ", self.baud,
               ", with timeout ", self.timeout)
 
+    def __del__(self):
+        self.ser.close()
+        print("Closed Arduino connection.")
+
     def connect(self):
-        #self.ser = serial.Serial(dev, baudRate, timeout)
+        self.ser = serial.Serial(self.dev, self.baud, timeout = self.timeout)
 
         print("Waiting for bootloader and clearing buffer")
-        time.sleep(2.00)
 
-        #while(self.ser.inWaiting()):
-        #   self.ser.readline()
-        self.command("SAMPLE")
+        time.sleep(2.00)
+        self.command("INIT")
+        self.ser.reset_input_buffer()
+        self.ser.reset_output_buffer()
+
+        self.command("SAMPLE0")
         self.read()
+
+        self.ser.reset_input_buffer()
+        self.ser.reset_output_buffer()
 
 
     def setSafetyDelay(self, delay = 0.1):
@@ -107,16 +134,19 @@ class IArduino:
 
     def command(self, command):  # giving out command to Arduino
         print ("To Arduino: " + command)
-        #self.ser.write( command + "\n")
-        #self.ser.flush()
+        self.ser.write( str.encode(command + "\n") )
+        self.ser.flush()
         time.sleep(self.commandDelay)
         return
 
     def read(self):
         print("Reading arduino...")
         V = 0
-        #while(self.ser.inWaiting()):
-        #    V = self.ser.readline()
+
+        while(self.ser.inWaiting()):
+            V = self.ser.readline()
+
+        self.ser.reset_input_buffer();
 
         V = float(V)
         print("From Arduino: " + str(V))

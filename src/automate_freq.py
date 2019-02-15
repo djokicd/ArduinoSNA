@@ -14,11 +14,11 @@ NA.setSafetyParams(delay = 0.2, Pmax = 5, Pmin = -45)
 NA.connect()
 
 ARD = IArduino(dev = '/dev/ttyUSB0', baudRate = 9600, timeout = 2.00)
-ARD.setSafetyDelay(0.2)
+ARD.setSafetyDelay(0.1)
 ARD.connect()
 
 # Input - power
-freq_v = np.arange( 200e6, 3e9, 500e6 )
+freq_v = np.arange( 200e6, 3e9, 50e6 )
 print (freq_v)
 
 # Output - measurements
@@ -26,9 +26,6 @@ V_vector = np.zeros(np.size(freq_v))
 S11_vector = np.zeros(np.size(freq_v))
 
 j = 0
-
-ARD.command("SAMPLE0")
-ARD.read()
 
 for f in freq_v:
     NA.setFrequency(f)
