@@ -5,6 +5,7 @@ __email__ = "djokicd@outlook.com"
 __license__ = "GPLv3+"
 
 from pylab import plt, np
+from scipy import interpolate
 import vxi11
 import serial
 import time
@@ -151,3 +152,74 @@ class IArduino:
         V = float(V)
         print("From Arduino: " + str(V))
         return V
+
+class Sensor:
+    """
+    Sensor behaviour is defined using
+    .npz file
+    """
+    def __init__(self, filename):
+        print(filename)
+        d = np.load(filename)
+        self.data = d
+        self.Fmin = d["F"].min()
+        self.Fmax = d["F"].max()
+        self.Pmin = d["P"].min()
+        self.Pmax = d["P"].max()
+        print("Sensor params defined for:",
+              self.Fmin/1e9, " < f[GHz] < ", self.Fmax/1e9, "; ",
+              self.Pmin, " < P[dBm] < ", self.Pmax, ".")
+
+    def estimatePower(self, f0, plot = False):
+        """
+        Estimate sensor characterisic using
+        linear interpolation for given frequency
+        - returns: FUNCTION V = V(P)
+        """
+        freq_values = self.data["F"][0]
+        pow_values = np.transpose(self.data["P"])[0]
+        print(pow_values)
+
+        n = 0
+        fractj = 0.00
+
+        if (f0 < self.Fmin):
+            n = 0
+        elif(f0 > self.Fmax):
+            n = -1
+        else:
+            freq_idxs = np.arange(0, len(freq_values))
+            value_to_index = interpolate.interp1d(freq_values, freq_idxs, kind='linear')
+            j = value_to_index(f0)
+            fractj = j-int(j)
+            n = int(j)
+        print(n)
+        if (fractj == 0.00):
+            V = np.transpose(self.data["V"])[n]
+        else:
+            V = np.transpose(self.data["V"])[n] * (1-fractj) + np.transpose(self.data["V"])[n+1] * (fractj)
+
+        if (plot == True):
+            plt.figure()
+            plt.plot(V, pow_values)
+            plt.xlabel("Voltage [V]")
+            plt.ylabel("Power [dBm]")
+            plt.show()
+
+        estimator = interpolate.interp1d(V, pow_values, fill_value="extrapolate")
+        return estimator
+
+    def measure(self, freqs, V):
+        """
+        Return power-freqs vector from voltage-freqs
+        vector
+        """
+        P = np.zeros(np.shape(V))
+        j = 0
+        for f in freqs:
+            print(f)
+            estP = self.estimatePower(f)
+            P[j] = estP(V[j])
+            j += 1
+
+        return freqs, P
